@@ -1,4 +1,5 @@
 import os
+import shutil
 import logging
 from datetime import datetime
 from config import Config
@@ -40,7 +41,34 @@ class Pipeline:
         )
         
         self.logger = logging.getLogger(__name__)
-    
+
+    def _cleanup_temp_files(self):
+        """Clean up temporary audio and image files after video creation"""
+        try:
+            # Clean audio directory
+            if os.path.exists(Config.AUDIO_DIR):
+                for file in os.listdir(Config.AUDIO_DIR):
+                    file_path = os.path.join(Config.AUDIO_DIR, file)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                self.logger.info("✓ Cleaned up audio files")
+
+            # Clean images directory
+            if os.path.exists(Config.IMAGES_DIR):
+                for file in os.listdir(Config.IMAGES_DIR):
+                    file_path = os.path.join(Config.IMAGES_DIR, file)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                self.logger.info("✓ Cleaned up image files")
+
+            # Clean combined audio output file
+            combined_audio = os.path.join(Config.OUTPUT_DIR, "combined_output.wav")
+            if os.path.exists(combined_audio):
+                os.remove(combined_audio)
+
+        except Exception as e:
+            self.logger.warning(f"⚠️  Error cleaning up temp files: {e}")
+
     def run(self, iterations=1, topic="cars", distribute_to="email"):
         """
         Run the complete pipeline
@@ -144,7 +172,10 @@ class Pipeline:
         if not video_path:
             self.logger.error("Failed to create video")
             return None
-        
+
+        # Clean up temporary files after video creation
+        self._cleanup_temp_files()
+
         # Step 6: Distribute
         self.logger.info(f"\nStep 6: Distributing to {distribute_to}...")
         
