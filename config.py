@@ -1,8 +1,11 @@
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Fallback: use dotenv_values for variables that don't load properly
+_env_values = dotenv_values(".env")
 
 class Config:
     """Configuration class for PosterBot"""
@@ -27,7 +30,14 @@ class Config:
     DEFAULT_VOICE = os.getenv("DEFAULT_VOICE", "random")
     IMAGE_COUNT = int(os.getenv("IMAGE_COUNT", "10"))
     IMAGE_SOURCE = os.getenv("IMAGE_SOURCE", "pexels")  # "pexels" or "duckduckgo"
-    
+
+    # TikTok API settings
+    TIKTOK_CLIENT_KEY = os.getenv("TIKTOK_CLIENT_KEY") or _env_values.get("TIKTOK_CLIENT_KEY")
+    TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET") or _env_values.get("TIKTOK_CLIENT_SECRET")
+    TIKTOK_ACCESS_TOKEN = os.getenv("TIKTOK_ACCESS_TOKEN") or _env_values.get("TIKTOK_ACCESS_TOKEN")
+    TIKTOK_REFRESH_TOKEN = os.getenv("TIKTOK_REFRESH_TOKEN") or _env_values.get("TIKTOK_REFRESH_TOKEN")
+    TIKTOK_REDIRECT_URI = os.getenv("TIKTOK_REDIRECT_URI") or _env_values.get("TIKTOK_REDIRECT_URI", "http://localhost:8080/callback")
+
     # Directories
     OUTPUT_DIR = "output"
     AUDIO_DIR = os.path.join(OUTPUT_DIR, "audio")

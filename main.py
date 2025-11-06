@@ -3,10 +3,11 @@
 PosterBot - Automated Video Content Creation and Distribution
 
 Usage:
-    python main.py                      # Create 1 car video and email it
-    python main.py --count 5            # Create 5 car videos
-    python main.py --topic tech         # Create video about tech
-    python main.py --no-distribute      # Create video but don't distribute
+    python main.py                         # Create 1 car video and email it
+    python main.py --count 5               # Create 5 car videos
+    python main.py --topic tech            # Create video about tech
+    python main.py --distribute-to tiktok  # Post to TikTok
+    python main.py --no-distribute         # Create video but don't distribute
 """
 
 import argparse
@@ -33,7 +34,7 @@ def main():
         "--distribute-to",
         type=str,
         default="email",
-        choices=["email", "none"],
+        choices=["email", "tiktok", "instagram", "youtube", "none"],
         help="Platform to distribute to (default: email)"
     )
     
