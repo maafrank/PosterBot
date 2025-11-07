@@ -29,7 +29,11 @@ class Config:
     # Content settings
     DEFAULT_VOICE = os.getenv("DEFAULT_VOICE", "random")
     IMAGE_COUNT = int(os.getenv("IMAGE_COUNT", "10"))
-    IMAGE_SOURCE = os.getenv("IMAGE_SOURCE", "pexels")  # "pexels" or "duckduckgo"
+    IMAGE_SOURCE = os.getenv("IMAGE_SOURCE", "pexels")  # "flux-schnell", "flux-dev", "pexels", or "duckduckgo"
+
+    # FLUX AI Image Generation settings
+    FLUX_MODEL = os.getenv("FLUX_MODEL", "schnell")  # "schnell" (fast) or "dev" (quality)
+    FLUX_QUANTIZE = int(os.getenv("FLUX_QUANTIZE", "8"))  # 4-8 bits (lower = faster, less memory)
 
     # TikTok API settings
     TIKTOK_CLIENT_KEY = os.getenv("TIKTOK_CLIENT_KEY") or _env_values.get("TIKTOK_CLIENT_KEY")

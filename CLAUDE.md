@@ -124,7 +124,40 @@ Centralized config loaded from `.env`:
 
 ## Switching Image Sources
 
-Set `IMAGE_SOURCE=duckduckgo` in `.env` to use DuckDuckGo instead of Pexels (not recommended due to rate limits). To add new source (e.g., Unsplash, DALL-E):
+Set `IMAGE_SOURCE` in `.env` to control how images are collected:
+
+- **`flux-schnell`**: Local AI generation (fast, 4-10s per image) - **NEW!** ⭐
+- **`flux-dev`**: Local AI generation (high quality, 15-30s per image) - **NEW!** ⭐
+- **`pexels`**: Pexels stock photos (default, fast but limited by API rate)
+- **`duckduckgo`**: Web search (not recommended due to rate limits)
+
+### FLUX AI Generation (Recommended for M3 Mac)
+
+PosterBot now supports **local AI image generation** using FLUX models. This eliminates API costs and provides photorealistic car images.
+
+**See [FLUX_SETUP.md](FLUX_SETUP.md) for complete setup instructions.**
+
+Quick setup:
+```bash
+pip install mflux
+# Set in .env:
+IMAGE_SOURCE=flux-schnell
+FLUX_MODEL=schnell
+FLUX_QUANTIZE=8
+```
+
+**Benefits:**
+- Free forever (no API costs)
+- No rate limits
+- Photorealistic quality
+- Generates any car model (even rare/obscure ones)
+- 10 diverse angles per video automatically
+
+**Performance on M3 18GB:**
+- FLUX Schnell: ~1-2 minutes for 10 images
+- FLUX Dev: ~3-5 minutes for 10 images
+
+To add other sources (e.g., Unsplash, DALL-E):
 1. Add API key to `.env` and `config.py`
 2. Implement `_collect_images_newsource()` in `media_collector.py`
 3. Add conditional in `collect_media()` method

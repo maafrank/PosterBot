@@ -9,6 +9,7 @@ from PIL import Image
 from io import BytesIO
 from duckduckgo_search import DDGS
 from config import Config
+from core.ai_prompt_generator import AIPromptGenerator
 
 class MediaCollector:
     """Collects images/videos for content using various sources"""
@@ -18,6 +19,9 @@ class MediaCollector:
         self.target_height = target_height or Config.VIDEO_HEIGHT
         self.image_source = image_source or Config.IMAGE_SOURCE
         self.pexels_api_key = Config.PEXELS_API_KEY
+        self.flux_model = None  # Lazy load FLUX model when needed
+        self.flux_model_name = Config.FLUX_MODEL  # "schnell" or "dev"
+        self.flux_quantize = Config.FLUX_QUANTIZE  # Quantization level (4-8 bits)
     
     def collect_media(self, query, count=None, media_type="image", output_dir=None):
         """
@@ -44,13 +48,113 @@ class MediaCollector:
         os.makedirs(output_dir, exist_ok=True)
 
         if media_type == "image":
-            if self.image_source == "pexels":
+            if self.image_source == "flux-schnell" or self.image_source == "flux-dev":
+                return self._collect_images_flux(query, count, output_dir)
+            elif self.image_source == "pexels":
                 return self._collect_images_pexels(query, count, output_dir)
-            else:
+            elif self.image_source == "duckduckgo":
                 return self._collect_images_duckduckgo(query, count, output_dir)
+            else:
+                # Auto-fallback: Try FLUX first, then Pexels, then DuckDuckGo
+                print(f"⚠️  Unknown image source '{self.image_source}', trying FLUX first...")
+                try:
+                    return self._collect_images_flux(query, count, output_dir)
+                except Exception as e:
+                    print(f"⚠️  FLUX failed: {e}")
+                    print("Falling back to Pexels...")
+                    try:
+                        return self._collect_images_pexels(query, count, output_dir)
+                    except Exception as e2:
+                        print(f"⚠️  Pexels failed: {e2}")
+                        print("Falling back to DuckDuckGo...")
+                        return self._collect_images_duckduckgo(query, count, output_dir)
         else:
             raise NotImplementedError("Video collection not yet implemented")
     
+    def _collect_images_flux(self, query, count, output_dir):
+        """Collect images using FLUX AI model (local generation)"""
+        print(f"\n🎨 Generating {count} AI images for: {query}")
+        print(f"Using FLUX model: {self.flux_model_name}")
+
+        try:
+            # Lazy load FLUX model
+            if self.flux_model is None:
+                print("Loading FLUX model (this may take a minute on first run)...")
+                from mflux.generate import Flux1
+
+                self.flux_model = Flux1.from_name(
+                    model_name=self.flux_model_name,
+                    quantize=self.flux_quantize
+                )
+                print("✓ FLUX model loaded successfully")
+
+            # Generate diverse prompts for the car
+            prompt_data = AIPromptGenerator.generate_prompts(query, count)
+
+            image_paths = []
+
+            # Determine inference steps based on model
+            if self.flux_model_name == "schnell":
+                num_steps = 4  # Schnell works best with 2-4 steps
+            else:
+                num_steps = 20  # Dev works best with 20-25 steps
+
+            from mflux.generate import Config as MfluxConfig
+
+            for i, prompt_info in enumerate(prompt_data):
+                prompt_text = prompt_info["prompt"]
+                shot_description = prompt_info["description"]
+
+                print(f"\nGenerating image {i+1}/{count}: {shot_description}")
+                print(f"Prompt: {prompt_text[:80]}...")
+
+                try:
+                    # Generate image
+                    start_time = time.time()
+
+                    image = self.flux_model.generate_image(
+                        seed=random.randint(0, 1000000),  # Random seed for variety
+                        prompt=prompt_text,
+                        config=MfluxConfig(
+                            num_inference_steps=num_steps,
+                            height=self.target_height,
+                            width=self.target_width
+                        )
+                    )
+
+                    generation_time = time.time() - start_time
+
+                    # Save image
+                    image_path = os.path.join(output_dir, f"image_{i}.jpg")
+
+                    # Convert to RGB if needed and save
+                    if image.mode != 'RGB':
+                        image = image.convert('RGB')
+
+                    image.save(image_path, quality=95)
+                    image_paths.append(image_path)
+
+                    print(f"✓ Generated in {generation_time:.1f}s")
+
+                except Exception as e:
+                    print(f"✗ Failed to generate image {i+1}: {e}")
+                    # Continue with other images even if one fails
+                    continue
+
+            if not image_paths:
+                raise RuntimeError("Failed to generate any images with FLUX")
+
+            print(f"\n✓ Successfully generated {len(image_paths)}/{count} images")
+            return image_paths
+
+        except ImportError:
+            raise RuntimeError(
+                "mflux is not installed. Install it with: pip install mflux\n"
+                "Note: mflux requires Apple Silicon (M1/M2/M3/M4) Mac"
+            )
+        except Exception as e:
+            raise RuntimeError(f"FLUX image generation failed: {e}")
+
     def _collect_images_pexels(self, query, count, output_dir):
         """Collect images using Pexels API"""
         # For Pexels, we want to be more specific - always add "car" to the query

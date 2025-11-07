@@ -1,5 +1,6 @@
 # AI and APIs
 openai>=1.0.0
+mflux>=0.2.0  # FLUX AI image generation for Apple Silicon
 
 # Audio processing
 pydub>=0.25.1
