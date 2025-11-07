@@ -9,19 +9,28 @@ from core.text_to_speech import TextToSpeech
 from core.media_collector import MediaCollector
 from core.video_composer import VideoComposer
 from core.distributor import Distributor
+from core.prompt_config import PromptConfig
 
 class Pipeline:
     """Orchestrates the entire video creation and distribution workflow"""
-    
-    def __init__(self):
-        # Initialize all components
-        self.idea_generator = ContentIdeaGenerator()
-        self.story_writer = StoryWriter()
+
+    def __init__(self, prompt_config=None):
+        """
+        Initialize the pipeline
+
+        Args:
+            prompt_config: PromptConfig object or None for legacy behavior
+        """
+        self.prompt_config = prompt_config
+
+        # Initialize all components with config
+        self.idea_generator = ContentIdeaGenerator(prompt_config=prompt_config)
+        self.story_writer = StoryWriter(prompt_config=prompt_config)
         self.tts = TextToSpeech()
-        self.media_collector = MediaCollector()
+        self.media_collector = MediaCollector(prompt_config=prompt_config)
         self.video_composer = VideoComposer()
         self.distributor = Distributor()
-        
+
         # Setup logging
         self._setup_logging()
     
@@ -69,52 +78,63 @@ class Pipeline:
         except Exception as e:
             self.logger.warning(f"⚠️  Error cleaning up temp files: {e}")
 
-    def run(self, iterations=1, topic="cars", distribute_to="email"):
+    def run(self, iterations=1, topic="cars", distribute_to="email", prompt_config=None):
         """
         Run the complete pipeline
-        
+
         Args:
             iterations: Number of videos to create
-            topic: Topic for content generation
+            topic: Topic for content generation (legacy, ignored if prompt_config provided)
             distribute_to: Platform to distribute to ("email", "instagram", etc.)
-            
+            prompt_config: PromptConfig object (overrides instance config and topic)
+
         Returns:
             list: Paths to created videos
         """
         # Validate config and create directories
         Config.validate()
         Config.create_directories()
-        
-        self.logger.info(f"Starting pipeline: {iterations} iterations, topic={topic}")
-        
+
+        # Use provided config or instance config
+        config = prompt_config or self.prompt_config
+
+        if config:
+            config_name = config.get_name()
+            self.logger.info(f"Starting pipeline: {iterations} iterations, config={config_name}")
+        else:
+            self.logger.info(f"Starting pipeline: {iterations} iterations, topic={topic} (legacy)")
+
         created_videos = []
-        
+
         for i in range(iterations):
             self.logger.info(f"\n{'='*60}")
             self.logger.info(f"ITERATION {i+1}/{iterations}")
             self.logger.info(f"{'='*60}\n")
-            
+
             try:
-                video_path = self._run_single_iteration(topic, distribute_to, i+1)
+                video_path = self._run_single_iteration(topic, distribute_to, i+1, config)
                 if video_path:
                     created_videos.append(video_path)
-                    
+
             except Exception as e:
                 self.logger.error(f"Error in iteration {i+1}: {e}", exc_info=True)
                 continue
-        
+
         self.logger.info(f"\n{'='*60}")
         self.logger.info(f"Pipeline complete: {len(created_videos)}/{iterations} videos created")
         self.logger.info(f"{'='*60}\n")
-        
+
         return created_videos
     
-    def _run_single_iteration(self, topic, distribute_to, iteration_num):
+    def _run_single_iteration(self, topic, distribute_to, iteration_num, prompt_config=None):
         """Run a single iteration of the pipeline"""
-        
+
         # Step 1: Generate idea
         self.logger.info("Step 1: Generating content idea...")
-        idea = self.idea_generator.generate_idea(topic=topic)
+        if prompt_config:
+            idea = self.idea_generator.generate_idea(prompt_config=prompt_config)
+        else:
+            idea = self.idea_generator.generate_idea(topic=topic)
         
         if not idea:
             self.logger.error("Failed to generate idea")
@@ -128,27 +148,35 @@ class Pipeline:
         
         # Step 2: Write script
         self.logger.info("\nStep 2: Writing script...")
-        script = self.story_writer.write_script(concept, topic=topic)
+        if prompt_config:
+            script = self.story_writer.write_script(concept, prompt_config=prompt_config)
+        else:
+            script = self.story_writer.write_script(concept, topic=topic)
         
         if not script:
             self.logger.error("Failed to write script")
             return None
-        
-        self.logger.info(f"Script: {script[:100]}...")
+
+        self.logger.info(f"Script:\n{script}")
         
         # Step 3: Generate audio
         self.logger.info("\nStep 3: Generating audio...")
-        durations = self.tts.generate_audio(script)
-        
+        durations, sentences = self.tts.generate_audio(script)
+
         if not durations:
             self.logger.error("Failed to generate audio")
             return None
-        
+
         self.logger.info(f"Generated {len(durations)} audio segments")
-        
+
         # Step 4: Collect media
         self.logger.info("\nStep 4: Collecting images...")
-        image_paths = self.media_collector.collect_media(subject, count=len(durations))
+        image_paths = self.media_collector.collect_media(
+            subject,
+            count=len(durations),
+            script=script,  # Pass script for AI-generated image prompts
+            sentences=sentences  # Pass sentences for 1:1 image-sentence mapping
+        )
         
         if not image_paths:
             self.logger.error("Failed to collect images")

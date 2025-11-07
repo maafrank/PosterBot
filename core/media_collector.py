@@ -10,32 +10,48 @@ from io import BytesIO
 from duckduckgo_search import DDGS
 from config import Config
 from core.ai_prompt_generator import AIPromptGenerator
+from core.image_prompt_generator import ImagePromptGenerator
 
 class MediaCollector:
     """Collects images/videos for content using various sources"""
 
-    def __init__(self, target_width=None, target_height=None, image_source=None):
+    def __init__(self, target_width=None, target_height=None, image_source=None, prompt_config=None):
         self.target_width = target_width or Config.VIDEO_WIDTH
         self.target_height = target_height or Config.VIDEO_HEIGHT
-        self.image_source = image_source or Config.IMAGE_SOURCE
+        self.prompt_config = prompt_config  # PromptConfig for image generation
+
+        # Image source priority: explicit param > config > global config
+        if image_source:
+            self.image_source = image_source
+        elif prompt_config:
+            self.image_source = prompt_config.get_image_strategy()
+        else:
+            self.image_source = Config.IMAGE_SOURCE
+
         self.pexels_api_key = Config.PEXELS_API_KEY
         self.flux_model = None  # Lazy load FLUX model when needed
         self.flux_model_name = Config.FLUX_MODEL  # "schnell" or "dev"
         self.flux_quantize = Config.FLUX_QUANTIZE  # Quantization level (4-8 bits)
     
-    def collect_media(self, query, count=None, media_type="image", output_dir=None):
+    def collect_media(self, query, count=None, media_type="image", output_dir=None, script=None, sentences=None):
         """
         Collect media files based on query
-        
+
         Args:
-            query: Search query (e.g., car name)
-            count: Number of media files to collect
+            query: Search query (e.g., car name, alien encounter)
+            count: Number of media files to collect (overridden by sentences if provided)
             media_type: Type of media ("image" or "video")
             output_dir: Directory to save files (default: Config.IMAGES_DIR)
-            
+            script: Video script (used for AI-generated image prompts)
+            sentences: List of sentences from script (for 1:1 image-sentence sync)
+
         Returns:
             list: Paths to collected media files
         """
+        # Use sentence count if provided for perfect 1:1 sync
+        if sentences:
+            count = len(sentences)
+            print(f"📊 Generating {count} images (1 per sentence)")
         if count is None:
             count = Config.IMAGE_COUNT
         
@@ -49,7 +65,7 @@ class MediaCollector:
 
         if media_type == "image":
             if self.image_source == "flux-schnell" or self.image_source == "flux-dev":
-                return self._collect_images_flux(query, count, output_dir)
+                return self._collect_images_flux(query, count, output_dir, script, sentences)
             elif self.image_source == "pexels":
                 return self._collect_images_pexels(query, count, output_dir)
             elif self.image_source == "duckduckgo":
@@ -58,7 +74,7 @@ class MediaCollector:
                 # Auto-fallback: Try FLUX first, then Pexels, then DuckDuckGo
                 print(f"⚠️  Unknown image source '{self.image_source}', trying FLUX first...")
                 try:
-                    return self._collect_images_flux(query, count, output_dir)
+                    return self._collect_images_flux(query, count, output_dir, script, sentences)
                 except Exception as e:
                     print(f"⚠️  FLUX failed: {e}")
                     print("Falling back to Pexels...")
@@ -71,7 +87,7 @@ class MediaCollector:
         else:
             raise NotImplementedError("Video collection not yet implemented")
     
-    def _collect_images_flux(self, query, count, output_dir):
+    def _collect_images_flux(self, query, count, output_dir, script=None, sentences=None):
         """Collect images using FLUX AI model (local generation)"""
         print(f"\n🎨 Generating {count} AI images for: {query}")
         print(f"Using FLUX model: {self.flux_model_name}")
@@ -88,8 +104,15 @@ class MediaCollector:
                 )
                 print("✓ FLUX model loaded successfully")
 
-            # Generate diverse prompts for the car
-            prompt_data = AIPromptGenerator.generate_prompts(query, count)
+            # Determine prompt generation mode
+            prompt_data = self._generate_image_prompts(query, count, script, sentences)
+
+            # Append base style to all prompts (hardcoded for quality)
+            base_style = self._get_base_style()
+            for prompt_info in prompt_data:
+                # Add base style if not already present
+                if base_style not in prompt_info["prompt"]:
+                    prompt_info["prompt"] = f"{prompt_info['prompt']}, {base_style}"
 
             image_paths = []
 
@@ -105,8 +128,11 @@ class MediaCollector:
                 prompt_text = prompt_info["prompt"]
                 shot_description = prompt_info["description"]
 
-                print(f"\nGenerating image {i+1}/{count}: {shot_description}")
-                print(f"Prompt: {prompt_text[:80]}...")
+                print(f"\n{'='*60}")
+                print(f"Image {i+1}/{count}: {shot_description}")
+                print(f"{'='*60}")
+                print(f"Prompt: {prompt_text}")
+                print(f"{'='*60}")
 
                 try:
                     # Generate image
@@ -320,6 +346,63 @@ class MediaCollector:
 
         print(f"\nCollected {len(image_paths)} images")
         return image_paths
+
+    def _generate_image_prompts(self, query, count, script, sentences=None):
+        """
+        Generate image prompts using AI or templates based on config
+
+        Args:
+            query: Subject/topic
+            count: Number of prompts needed
+            script: Video script (for AI generation)
+            sentences: List of individual sentences (for 1:1 mapping)
+
+        Returns:
+            list: Prompt data with 'prompt', 'description', 'name' keys
+        """
+        if not self.prompt_config:
+            # No config - use legacy template mode
+            return AIPromptGenerator.generate_prompts(query, count)
+
+        mode = self.prompt_config.get_image_prompt_mode()
+
+        if mode == "ai_generated" and script:
+            # AI-generated prompts based on story
+            if sentences:
+                print(f"🤖 Using AI to generate {count} story-based image prompts (1 per sentence)...")
+            else:
+                print(f"🤖 Using AI to generate {count} story-based image prompts...")
+
+            image_prompt_gen = ImagePromptGenerator()
+            prompts = image_prompt_gen.generate_prompts(
+                subject=query,
+                script=script,
+                count=count,
+                prompt_config=self.prompt_config,
+                sentences=sentences
+            )
+
+            if prompts:
+                print(f"✓ Generated {len(prompts)} AI prompts")
+                return prompts
+            else:
+                print("⚠️  AI prompt generation failed, falling back to templates")
+                # Fall through to template mode
+
+        # Template mode (default or fallback)
+        print(f"📝 Using template-based image prompts...")
+        shot_templates = self.prompt_config.get_shot_templates()
+        base_style = self.prompt_config.get_image_base_style()
+
+        return AIPromptGenerator.generate_prompts(
+            query, count, shot_templates=shot_templates, base_style=base_style
+        )
+
+    def _get_base_style(self):
+        """Get the base style to append to prompts"""
+        if self.prompt_config:
+            return self.prompt_config.get_image_base_style()
+        return AIPromptGenerator.DEFAULT_BASE_STYLE
 
     def _simplify_query(self, query):
         """Simplify search query while keeping brand/model info"""

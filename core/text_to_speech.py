@@ -16,13 +16,15 @@ class TextToSpeech:
     def generate_audio(self, text, output_dir=None):
         """
         Convert text to speech and return timing information
-        
+
         Args:
             text: The text to convert to speech
             output_dir: Directory to save audio files (default: Config.AUDIO_DIR)
-            
+
         Returns:
-            list: Duration of each sentence in seconds
+            tuple: (durations, sentences) where:
+                - durations: list of duration in seconds for each sentence
+                - sentences: list of sentence strings
         """
         if output_dir is None:
             output_dir = Config.AUDIO_DIR
@@ -71,8 +73,8 @@ class TextToSpeech:
             combined_path = os.path.join(Config.OUTPUT_DIR, "combined_output.wav")
             combined_audio.export(combined_path, format="wav")
             print(f"Combined audio saved to: {combined_path}")
-        
-        return durations
+
+        return durations, sentences
     
     def _split_sentences(self, text):
         """Split text into sentences"""

@@ -4,28 +4,44 @@ from config import Config
 
 class ContentIdeaGenerator:
     """Generates content ideas for videos using OpenAI"""
-    
-    def __init__(self, api_key=None):
+
+    def __init__(self, api_key=None, prompt_config=None):
         self.api_key = api_key or Config.OPENAI_API_KEY
         self.client = OpenAI(api_key=self.api_key)
-    
-    def generate_idea(self, topic="cars"):
+        self.prompt_config = prompt_config
+
+    def generate_idea(self, topic="cars", prompt_config=None):
         """
         Generate a content idea for a video
-        
+
         Args:
-            topic: The topic for content generation (default: "cars")
-            
+            topic: The topic for content generation (default: "cars") - legacy parameter
+            prompt_config: PromptConfig object (overrides topic if provided)
+
         Returns:
             dict: {"subject": "...", "concept": "..."}
         """
-        prompt = self._get_prompt(topic)
-        
+        # Use provided config or instance config
+        config = prompt_config or self.prompt_config
+
+        if config:
+            # Use PromptConfig
+            prompt = config.get_content_idea_prompt()
+            model = config.get_content_idea_model()
+            temperature = config.get_content_idea_temperature()
+            subject_key = config.get_subject_key()
+        else:
+            # Fallback to legacy topic-based prompts
+            prompt = self._get_legacy_prompt(topic)
+            model = "gpt-4o-mini"
+            temperature = 2.0
+            subject_key = "car" if topic == "cars" else "subject"
+
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=2.0,
+                temperature=temperature,
                 max_tokens=1000,
                 top_p=0.95,
                 frequency_penalty=1.0,
@@ -33,22 +49,23 @@ class ContentIdeaGenerator:
                 n=1,
                 response_format={"type": "json_object"}
             )
-            
+
             # Parse the JSON output
             idea = json.loads(response.choices[0].message.content)
-            
+
             # Normalize the keys to match our expected format
-            if "car" in idea:
-                idea["subject"] = idea.pop("car")
-            
+            # The config tells us which key contains the subject
+            if subject_key in idea and subject_key != "subject":
+                idea["subject"] = idea.pop(subject_key)
+
             return idea
-            
+
         except Exception as e:
             print(f"Failed to generate idea: {e}")
             return None
     
-    def _get_prompt(self, topic):
-        """Get the appropriate prompt based on topic"""
+    def _get_legacy_prompt(self, topic):
+        """Get the appropriate prompt based on topic (legacy method)"""
         if topic == "cars":
             return """
 # ROLE:

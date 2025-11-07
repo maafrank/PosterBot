@@ -4,26 +4,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## PosterBot Overview
 
-PosterBot is an automated video content creation and distribution system that generates viral short-form videos (currently focused on car content). It uses AI to generate ideas, write scripts, create voiceovers, collect images, compose videos, and distribute them.
+PosterBot is an automated video content creation and distribution system that generates viral short-form videos. It uses AI to generate ideas, write scripts, create voiceovers, generate/collect images, compose videos, and distribute them.
+
+**Supported Content Types:**
+- **Cars**: Edgy automotive content (reviews, culture, comparisons)
+- **Alien Stories**: UFO encounters and mysterious phenomena
+- **Extensible**: Easy to add new content types via YAML configs
 
 ## Running the Application
 
 ### Basic Commands
 ```bash
-# Create a single video and email it
-python3 main.py
+# Create a car video using the 'cars' config
+python3 main.py --config cars
+
+# Create alien encounter video
+python3 main.py --config alien_stories
 
 # Create multiple videos
-python3 main.py --count 5
+python3 main.py --config cars --count 5
 
 # Post video to TikTok
-python3 main.py --distribute-to tiktok
+python3 main.py --config cars --distribute-to tiktok
 
 # Create video without distribution (for testing)
-python3 main.py --no-distribute
+python3 main.py --config alien_stories --no-distribute
 
-# Create video about different topic (requires prompt customization)
-python3 main.py --topic tech
+# Legacy mode (still works, uses hardcoded prompts)
+python3 main.py --topic cars
+
+# Test FLUX AI image generation (2 test images)
+python3 test_flux.py
+
+# List available configs
+python3 main.py --config nonexistent  # Shows available configs on error
 ```
 
 ### Required Setup
@@ -34,25 +48,42 @@ python3 main.py --topic tech
 ## Architecture
 
 ### Pipeline Flow
-The `Pipeline` class (`core/pipeline.py`) orchestrates a 6-step workflow:
-1. **ContentIdeaGenerator** → Generates video concept via OpenAI
-2. **StoryWriter** → Writes 60-second script
+The `Pipeline` class ([core/pipeline.py](core/pipeline.py:1-199)) orchestrates a 6-step workflow:
+1. **ContentIdeaGenerator** → Generates video concept via OpenAI (uses PromptConfig)
+2. **StoryWriter** → Writes 60-second script (uses PromptConfig)
 3. **TextToSpeech** → Converts script to audio (OpenAI TTS)
-4. **MediaCollector** → Downloads images (Pexels API or DuckDuckGo fallback)
+4. **MediaCollector** → Generates/downloads images (FLUX AI, Pexels, or DuckDuckGo - uses PromptConfig)
 5. **VideoComposer** → Combines images + audio using MoviePy
 6. **Distributor** → Sends to platform (email/Instagram/TikTok/YouTube)
+
+### Prompt Configuration System
+
+**NEW**: PosterBot now uses YAML-based prompt configs for easy content type management.
+
+**`core/prompt_config.py`**: `PromptConfig`
+- Loads YAML config files from `prompt_configs/` directory
+- Validates required sections: `content_idea`, `story_writer`, `image_generation`
+- Provides prompts, templates, and settings to all pipeline components
+- Usage: `PromptConfig.from_name("cars")` or `PromptConfig("path/to/config.yaml")`
+
+**Available Configs** (in `prompt_configs/` directory):
+- **`cars.yaml`**: Automotive content (FLUX Schnell, 10 car shot templates)
+- **`alien_stories.yaml`**: UFO/alien encounters (FLUX Dev, 10 sci-fi shot templates)
+- See [prompt_configs/README.md](prompt_configs/README.md) for full documentation
 
 ### Core Components (`core/` directory)
 
 **`content_generator.py`**: `ContentIdeaGenerator`
-- Returns: `{"subject": "car name", "concept": "video hook"}`
-- Prompts are embedded in `_get_prompt(topic)` method
-- Currently supports "cars" topic with edgy/viral style
+- Returns: `{"subject": "...", "concept": "video hook"}`
+- **NEW**: Accepts `PromptConfig` object to customize prompts
+- **Legacy**: Still supports `topic` parameter with hardcoded prompts
+- Prompts now defined in YAML configs or `_get_legacy_prompt(topic)` method
 
 **`story_writer.py`**: `StoryWriter`
 - Takes concept, returns ~250 word script
 - Optimized for 60-second voiceover timing
-- Prompts embedded in `_get_prompt()` method
+- **NEW**: Accepts `PromptConfig` object to customize prompts and tone
+- **Legacy**: Still supports `topic` parameter with hardcoded prompts
 
 **`text_to_speech.py`**: `TextToSpeech`
 - Splits text into sentences, generates audio per sentence
@@ -61,10 +92,21 @@ The `Pipeline` class (`core/pipeline.py`) orchestrates a 6-step workflow:
 - Outputs: `output/audio/audio_N.mp3` + `output/combined_output.wav`
 
 **`media_collector.py`**: `MediaCollector`
-- **Primary source**: Pexels API (200 requests/hour free)
-- **Fallback**: DuckDuckGo search (unreliable, heavy rate limiting)
-- Query simplification: Removes parentheses, keeps brand/model/years, adds "car"
-- Auto-crops/resizes to target dimensions (1280x1280 default)
+- **FLUX AI** (new): Local image generation with 10 diverse camera angles
+  - Lazy-loads model on first use to save memory
+  - Returns GeneratedImage objects (extract with `.image` property)
+  - Supports both Schnell (fast) and Dev (quality) variants
+- **Pexels API**: 200 requests/hour free, searches "{brand} {model} {years} car"
+- **DuckDuckGo** (fallback): Unreliable, heavy rate limiting
+- Query handling: Keeps year ranges, removes generation codes in parentheses
+- Auto-crops/resizes to target dimensions (default: 576×1024 for TikTok/Reels)
+
+**`ai_prompt_generator.py`**: `AIPromptGenerator`
+- **NEW**: Now accepts dynamic shot templates and base style from PromptConfig
+- Generates diverse prompts for any content type (cars, aliens, etc.)
+- `generate_prompts(subject, count, shot_templates, base_style)` - fully customizable
+- **Legacy**: Default car templates still available for backward compatibility
+- Cleans subject names (removes generation codes, normalizes formatting)
 
 **`video_composer.py`**: `VideoComposer`
 - Uses MoviePy to sequence images with timing from TTS
@@ -86,8 +128,10 @@ Centralized config loaded from `.env`:
 - `OPENAI_API_KEY`, `PEXELS_API_KEY`
 - `EMAIL_SENDER`, `EMAIL_RECEIVER`, `EMAIL_APP_PASSWORD`
 - `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_REFRESH_TOKEN`, `TIKTOK_REDIRECT_URI`
-- `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS`
-- `IMAGE_SOURCE` (default: "pexels", fallback: "duckduckgo")
+- `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS` (default: 576×1024 for vertical TikTok/Reels format)
+- `IMAGE_SOURCE` ("flux-schnell", "flux-dev", "pexels", or "duckduckgo")
+- `FLUX_MODEL` ("schnell" for speed or "dev" for quality)
+- `FLUX_QUANTIZE` (4-8 bits; lower = faster/less memory, higher = better quality)
 - `DEFAULT_VOICE` ("random" or specific: alloy/echo/fable/onyx/nova/shimmer)
 
 ## Key Implementation Details
@@ -109,11 +153,36 @@ Centralized config loaded from `.env`:
 - MediaCollector raises `RuntimeError` if no images collected
 - Config validation happens at pipeline start (`Config.validate()`)
 
-## Adding New Topics
+## Adding New Content Types
 
-1. **Edit `core/content_generator.py`**: Add new prompt in `_get_prompt(topic)`
+**NEW**: Just create a YAML config file - no code changes needed!
+
+### Quick Start (Recommended)
+1. Copy an existing config:
+   ```bash
+   cp prompt_configs/cars.yaml prompt_configs/scary_stories.yaml
+   ```
+
+2. Edit the new config:
+   - Change `name` and `description`
+   - Update `content_idea` section (role, task, examples)
+   - Update `story_writer` section (role, structure, tone)
+   - Update `image_generation` section (strategy, shot_templates)
+   - Update `subject_key` to match your JSON output
+
+3. Test it:
+   ```bash
+   python3 main.py --config scary_stories --no-distribute
+   ```
+
+See [prompt_configs/README.md](prompt_configs/README.md) for detailed documentation.
+
+### Legacy Method (Not Recommended)
+
+If not using configs, edit code directly:
+1. **Edit `core/content_generator.py`**: Add new prompt in `_get_legacy_prompt(topic)`
 2. **Edit `core/story_writer.py`**: Add corresponding script template
-3. Prompts should return JSON with `{"subject": "...", "concept": "..."}`
+3. **Edit `core/ai_prompt_generator.py`**: Add shot templates for the topic
 4. Test with: `python3 main.py --topic newtopic --no-distribute`
 
 ## Adding Distribution Platforms
@@ -124,16 +193,22 @@ Centralized config loaded from `.env`:
 
 ## Switching Image Sources
 
-Set `IMAGE_SOURCE` in `.env` to control how images are collected:
+**Per-Config**: Set `image_generation.strategy` in your YAML config (recommended):
+```yaml
+image_generation:
+  strategy: "flux-dev"  # or flux-schnell, pexels, duckduckgo
+```
 
-- **`flux-schnell`**: Local AI generation (fast, 4-10s per image) - **NEW!** ⭐
-- **`flux-dev`**: Local AI generation (high quality, 15-30s per image) - **NEW!** ⭐
-- **`pexels`**: Pexels stock photos (default, fast but limited by API rate)
+**Globally**: Set `IMAGE_SOURCE` in `.env` (applies to all configs without explicit strategy):
+
+- **`flux-schnell`**: Local AI generation (fast, 4-10s per image) ⭐
+- **`flux-dev`**: Local AI generation (high quality, 15-30s per image) ⭐
+- **`pexels`**: Pexels stock photos (fast but limited by API rate)
 - **`duckduckgo`**: Web search (not recommended due to rate limits)
 
 ### FLUX AI Generation (Recommended for M3 Mac)
 
-PosterBot now supports **local AI image generation** using FLUX models. This eliminates API costs and provides photorealistic car images.
+PosterBot supports **local AI image generation** using FLUX models. This eliminates API costs and provides photorealistic images for any content type.
 
 **See [FLUX_SETUP.md](FLUX_SETUP.md) for complete setup instructions.**
 
@@ -143,19 +218,28 @@ pip install mflux
 # Set in .env:
 IMAGE_SOURCE=flux-schnell
 FLUX_MODEL=schnell
-FLUX_QUANTIZE=8
+FLUX_QUANTIZE=4  # Use 4 for M3 18GB to avoid OOM errors
+VIDEO_WIDTH=576
+VIDEO_HEIGHT=1024
 ```
 
 **Benefits:**
 - Free forever (no API costs)
 - No rate limits
 - Photorealistic quality
-- Generates any car model (even rare/obscure ones)
-- 10 diverse angles per video automatically
+- Generates any subject (cars, UFOs, creatures, landscapes, etc.)
+- Diverse angles/compositions per video (customizable via config)
 
-**Performance on M3 18GB:**
-- FLUX Schnell: ~1-2 minutes for 10 images
-- FLUX Dev: ~3-5 minutes for 10 images
+**Performance on M3 18GB (4-bit quantization, 576×1024 resolution):**
+- FLUX Schnell: ~50s per image, ~8-10 minutes for 10 images
+- FLUX Dev: ~2-3 minutes per image, ~20-30 minutes for 10 images
+- Memory usage: ~7-8GB (safe for 18GB RAM)
+
+**Important Notes:**
+- First run downloads ~10-15GB of model weights (one-time, 5-15 minutes)
+- Higher resolutions (1080×1920) may cause out-of-memory errors on 18GB RAM
+- Use `FLUX_QUANTIZE=4` for M3 18GB, `FLUX_QUANTIZE=8` for M3 Max 36GB+
+- Model loads lazily on first image generation to save memory
 
 To add other sources (e.g., Unsplash, DALL-E):
 1. Add API key to `.env` and `config.py`

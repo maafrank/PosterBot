@@ -3,45 +3,59 @@ from config import Config
 
 class StoryWriter:
     """Writes video scripts from concepts using OpenAI"""
-    
-    def __init__(self, api_key=None):
+
+    def __init__(self, api_key=None, prompt_config=None):
         self.api_key = api_key or Config.OPENAI_API_KEY
         self.client = OpenAI(api_key=self.api_key)
-    
-    def write_script(self, concept, duration=60, topic="cars"):
+        self.prompt_config = prompt_config
+
+    def write_script(self, concept, duration=60, topic="cars", prompt_config=None):
         """
         Write a video script based on a concept
-        
+
         Args:
             concept: The concept/hook for the video
             duration: Target duration in seconds (default: 60)
-            topic: The topic category (default: "cars")
-            
+            topic: The topic category (default: "cars") - legacy parameter
+            prompt_config: PromptConfig object (overrides topic if provided)
+
         Returns:
             str: The video script
         """
-        prompt = self._get_prompt(concept, duration, topic)
-        
+        # Use provided config or instance config
+        config = prompt_config or self.prompt_config
+
+        if config:
+            # Use PromptConfig
+            prompt = config.get_story_writer_prompt(concept, duration)
+            model = config.get_story_writer_model()
+            temperature = config.get_story_writer_temperature()
+        else:
+            # Fallback to legacy topic-based prompts
+            prompt = self._get_legacy_prompt(concept, duration, topic)
+            model = "gpt-4o-mini"
+            temperature = 1.9
+
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=1.9,
+                temperature=temperature,
                 max_tokens=1000,
                 top_p=0.90,
                 frequency_penalty=1.2,
                 n=1
             )
-            
+
             story = response.choices[0].message.content
             return story
-            
+
         except Exception as e:
             print(f"Failed to write script: {e}")
             return None
     
-    def _get_prompt(self, concept, duration, topic):
-        """Get the appropriate prompt based on topic"""
+    def _get_legacy_prompt(self, concept, duration, topic):
+        """Get the appropriate prompt based on topic (legacy method)"""
         if topic == "cars":
             return f"""
 # ROLE:

@@ -1,0 +1,171 @@
+name: "alien_stories"
+description: "UFO encounters and alien stories - mysterious and captivating"
+
+# ============================================================================
+# STEP 1: Content Idea Generation
+# ============================================================================
+content_idea:
+  model: "gpt-4o-mini"
+  temperature: 2.0
+  subject_key: "encounter"  # The JSON key that contains the subject
+
+  role: |
+    You are a UFO researcher and sci-fi storyteller who specializes in compelling alien encounter narratives. You have deep knowledge of famous UFO cases, alien abduction stories, government conspiracies, and unexplained phenomena. You create mysterious, intriguing content that keeps viewers on the edge of their seats.
+
+  task: |
+    Come up with a viral TikTok/Instagram video idea about an alien encounter or UFO sighting. The idea should be formatted as a JSON object with:
+    {
+      "encounter": "descriptive name of the encounter/sighting (location + year if applicable)",
+      "concept": "the hook or headline, 1 sentence long"
+    }
+    Focus on real historical cases, famous sightings, or compelling fictional scenarios. Make it mysterious, intriguing, and clickable.
+
+  output_characteristics: |
+    - Output a JSON object only
+    - Must have an "encounter" field with a descriptive name
+    - Must have a "concept" field with an intriguing headline
+    - Can reference real cases or create fictional scenarios
+    - DO NOT explain anything — just return the JSON entry
+
+  examples:
+    - '{"encounter": "Phoenix Lights 1997", "concept": "13,000 people saw it. The government still won''t explain what it was."}'
+    - '{"encounter": "Rendlesham Forest Incident", "concept": "What did US airmen really find in the British woods in 1980?"}'
+    - '{"encounter": "Betty and Barney Hill Abduction", "concept": "The first alien abduction case that changed everything"}'
+
+# ============================================================================
+# STEP 2: Story/Script Writing
+# ============================================================================
+story_writer:
+  model: "gpt-4o-mini"
+  temperature: 1.9
+  max_words: 250
+  tone: "mysterious, suspenseful, documentary-style, first-person witness account"
+
+  role: |
+    You are a master storyteller who specializes in alien encounter and UFO sighting narratives. You write compelling, mysterious scripts that blend factual details with atmospheric tension. Your stories are perfect for short-form video content that keeps viewers engaged and wanting more.
+
+  structure:
+    - "Hook - grab attention with the most compelling detail"
+    - "Setup - establish the normal situation before the encounter"
+    - "The encounter - what happened, building tension and mystery"
+    - "Aftermath - unexplained details, lingering questions"
+    - "Haunting conclusion - leave them thinking"
+
+  instructions: |
+    - Write in a documentary narrator style or first-person witness perspective
+    - Use vivid, atmospheric descriptions
+    - Build suspense and mystery throughout
+    - Include specific details that make it feel real
+    - Max ~250 words (aim for 60-second voiceover timing)
+    - Do NOT add hashtags, emojis, or video editing instructions
+    - Balance skepticism and belief - let the viewer decide
+    - End with an unanswered question or chilling detail
+
+  examples:
+    - |
+      Concept: "The Phoenix Lights - what 13,000 people saw"
+
+      Script:
+      March 13, 1997. Phoenix, Arizona.
+      Over 13,000 people looked up at the night sky and saw the same thing.
+      A massive V-shaped object, completely silent, floating over the city.
+      Some said it was a mile wide. Witnesses described lights in perfect formation, moving as one.
+      The governor held a press conference. Made a joke. Brought out someone in an alien costume.
+      But years later, he admitted he saw it too. And he had no explanation.
+      The military said flares. But flares don't hold formation. They don't move in unison. They don't block out the stars behind them.
+      Thousands of people, from all walks of life, describing the exact same thing.
+      All of them wrong? Or all of them right?
+      Twenty-six years later, we still don't have answers.
+      Just 13,000 witnesses to something that shouldn't exist.
+
+# ============================================================================
+# STEP 3: Image Generation
+# ============================================================================
+image_generation:
+  strategy: "flux-dev"  # Use higher quality model for atmospheric alien imagery
+  mode: "ai_generated"  # AI generates prompts based on story (or "templated" for static templates)
+  count: 10  # Number of images to generate
+
+  # Base style applied to all AI-generated prompts (hardcoded for quality)
+  base_style: "cinematic sci-fi photography, mysterious atmosphere, photorealistic, dramatic lighting, 8k uhd, high quality, cosmic aesthetic, detailed"
+
+  # Custom instructions for AI prompt generator (optional - uses defaults if omitted)
+  ai_prompt_instructions: |
+    You are an expert at creating photorealistic image prompts for alien/UFO content.
+
+    Generate 10 diverse, cinematic image prompts that visually tell the alien encounter story.
+
+    CRITICAL RULES:
+    1. Each prompt must be ONE SENTENCE describing a specific scene
+    2. Follow the STORY'S NARRATIVE (beginning → middle → end)
+    3. Include VARIETY: wide shots, close-ups, witness perspectives, UFO craft, atmospheric scenes
+    4. Be SPECIFIC and VISUAL (describe what can be seen, not abstract concepts)
+    5. Make prompts MYSTERIOUS and ATMOSPHERIC
+    6. No text, logos, or specific recognizable faces
+    7. Stay true to UFO/alien encounter aesthetics
+
+    Shot variety examples:
+    - Night sky with mysterious lights
+    - Witness perspectives (looking up, awestruck)
+    - UFO craft details and formations
+    - Landing sites or environments
+    - Atmospheric/mysterious scenes
+    - Government documents or investigation scenes
+    - Beams of light, glowing phenomena
+
+    OUTPUT FORMAT:
+    {{
+      "prompts": [
+        {{"prompt": "one-sentence visual description", "description": "short label"}},
+        ...
+      ]
+    }}
+
+  # Fallback templates (used if AI generation fails)
+  shot_templates:
+    - name: "night_sky_ufo"
+      description: "Night sky with UFO"
+      template: "night sky with mysterious lights and UFO craft related to {subject}, stars visible, dramatic atmosphere, {base_style}"
+
+    - name: "witness_perspective"
+      description: "Witness POV looking up"
+      template: "first-person perspective looking up at sky during {subject}, sense of awe and mystery, {base_style}"
+
+    - name: "ufo_closeup"
+      description: "Close-up of craft"
+      template: "detailed close-up view of alien spacecraft from {subject}, metallic surface, otherworldly design, {base_style}"
+
+    - name: "landing_site"
+      description: "Landing site aftermath"
+      template: "mysterious landing site related to {subject}, evidence of encounter, eerie atmosphere, {base_style}"
+
+    - name: "alien_presence"
+      description: "Alien presence suggestion"
+      template: "subtle suggestion of alien presence during {subject}, shadowy figure, mysterious silhouette, {base_style}"
+
+    - name: "government_coverup"
+      description: "Government documents"
+      template: "classified government documents and files about {subject}, top secret stamps, conspiracy atmosphere, {base_style}"
+
+    - name: "desert_landscape"
+      description: "Desert/remote location"
+      template: "remote desert or forest landscape where {subject} occurred, isolated location, mysterious mood, {base_style}"
+
+    - name: "beam_of_light"
+      description: "Beam from sky"
+      template: "bright beam of light from sky during {subject}, dramatic lighting, otherworldly glow, {base_style}"
+
+    - name: "formation_lights"
+      description: "Formation of lights"
+      template: "formation of mysterious lights in sky from {subject}, geometric pattern, unexplained phenomenon, {base_style}"
+
+    - name: "close_encounter"
+      description: "Close encounter scene"
+      template: "dramatic close encounter scene depicting {subject}, human witness and alien craft in frame, tense atmosphere, {base_style}"
+
+# ============================================================================
+# STEP 4: Distribution
+# ============================================================================
+distribution:
+  default_platform: "email"
+  caption_template: "The truth about {subject} 🛸"
