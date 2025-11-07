@@ -76,9 +76,9 @@ class AIPromptGenerator:
         """
         prompts = []
 
-        # Simplify car name for better AI understanding
-        # Remove year ranges and generation codes
-        simplified_name = AIPromptGenerator._simplify_car_name(car_name)
+        # Keep the full car name including years for accurate generation
+        # Just remove generation codes in parentheses
+        clean_name = AIPromptGenerator._clean_car_name(car_name)
 
         # Generate prompts using templates
         templates_to_use = AIPromptGenerator.SHOT_TEMPLATES[:count]
@@ -86,7 +86,7 @@ class AIPromptGenerator:
         for template_info in templates_to_use:
             template = template_info["template"]
             prompt = template.format(
-                car_name=simplified_name,
+                car_name=clean_name,
                 base_style=AIPromptGenerator.BASE_STYLE
             )
             prompts.append({
@@ -98,9 +98,31 @@ class AIPromptGenerator:
         return prompts
 
     @staticmethod
+    def _clean_car_name(car_name):
+        """
+        Clean car name while preserving year information
+        Examples:
+            "1994-2001 Acura Integra Type R (DC2)" -> "1994-2001 Acura Integra Type R"
+            "2020 Toyota Supra (A90)" -> "2020 Toyota Supra"
+            "1990–1999 Mazda Miata" -> "1990-1999 Mazda Miata"
+        """
+        import re
+
+        # Remove generation codes in parentheses (e.g., "(DC2)", "(A90)")
+        cleaned = re.sub(r'\s*\([^)]*\)', '', car_name)
+
+        # Normalize en-dash to hyphen for year ranges
+        cleaned = cleaned.replace('–', '-')
+
+        # Clean up extra spaces
+        cleaned = ' '.join(cleaned.split())
+
+        return cleaned.strip()
+
+    @staticmethod
     def _simplify_car_name(car_name):
         """
-        Simplify car name for AI understanding
+        Simplify car name for AI understanding (legacy method)
         Examples:
             "1994-2001 Acura Integra Type R (DC2)" -> "Acura Integra Type R"
             "2020 Toyota Supra (A90)" -> "Toyota Supra"

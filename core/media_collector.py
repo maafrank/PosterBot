@@ -112,7 +112,7 @@ class MediaCollector:
                     # Generate image
                     start_time = time.time()
 
-                    image = self.flux_model.generate_image(
+                    result = self.flux_model.generate_image(
                         seed=random.randint(0, 1000000),  # Random seed for variety
                         prompt=prompt_text,
                         config=MfluxConfig(
@@ -124,11 +124,17 @@ class MediaCollector:
 
                     generation_time = time.time() - start_time
 
+                    # FLUX returns a GeneratedImage object, get the PIL image
+                    if hasattr(result, 'image'):
+                        image = result.image
+                    else:
+                        image = result
+
                     # Save image
                     image_path = os.path.join(output_dir, f"image_{i}.jpg")
 
                     # Convert to RGB if needed and save
-                    if image.mode != 'RGB':
+                    if hasattr(image, 'mode') and image.mode != 'RGB':
                         image = image.convert('RGB')
 
                     image.save(image_path, quality=95)
