@@ -30,14 +30,11 @@ python3 main.py --config cars --distribute-to tiktok
 # Create video without distribution (for testing)
 python3 main.py --config alien_stories --no-distribute
 
-# Legacy mode (still works, uses hardcoded prompts)
-python3 main.py --topic cars
-
 # Test FLUX AI image generation (2 test images)
 python3 test_flux.py
 
 # List available configs
-python3 main.py --config nonexistent  # Shows available configs on error
+python3 main.py  # Shows available configs if --config is missing
 ```
 
 ### Required Setup
@@ -58,13 +55,14 @@ The `Pipeline` class ([core/pipeline.py](core/pipeline.py:1-199)) orchestrates a
 
 ### Prompt Configuration System
 
-**NEW**: PosterBot now uses YAML-based prompt configs for easy content type management.
+PosterBot uses YAML-based prompt configs for easy content type management.
 
 **`core/prompt_config.py`**: `PromptConfig`
 - Loads YAML config files from `prompt_configs/` directory
 - Validates required sections: `content_idea`, `story_writer`, `image_generation`
 - Provides prompts, templates, and settings to all pipeline components
 - Usage: `PromptConfig.from_name("cars")` or `PromptConfig("path/to/config.yaml")`
+- **Required**: All pipeline components now require a PromptConfig object
 
 **Available Configs** (in `prompt_configs/` directory):
 - **`cars.yaml`**: Automotive content (FLUX Schnell, 10 car shot templates)
@@ -75,15 +73,14 @@ The `Pipeline` class ([core/pipeline.py](core/pipeline.py:1-199)) orchestrates a
 
 **`content_generator.py`**: `ContentIdeaGenerator`
 - Returns: `{"subject": "...", "concept": "video hook"}`
-- **NEW**: Accepts `PromptConfig` object to customize prompts
-- **Legacy**: Still supports `topic` parameter with hardcoded prompts
-- Prompts now defined in YAML configs or `_get_legacy_prompt(topic)` method
+- Requires `PromptConfig` object to customize prompts
+- Prompts defined in YAML configs
 
 **`story_writer.py`**: `StoryWriter`
 - Takes concept, returns ~250 word script
 - Optimized for 60-second voiceover timing
-- **NEW**: Accepts `PromptConfig` object to customize prompts and tone
-- **Legacy**: Still supports `topic` parameter with hardcoded prompts
+- Requires `PromptConfig` object to customize prompts and tone
+- Prompts defined in YAML configs
 
 **`text_to_speech.py`**: `TextToSpeech`
 - Splits text into sentences, generates audio per sentence
@@ -102,10 +99,10 @@ The `Pipeline` class ([core/pipeline.py](core/pipeline.py:1-199)) orchestrates a
 - Auto-crops/resizes to target dimensions (default: 576×1024 for TikTok/Reels)
 
 **`ai_prompt_generator.py`**: `AIPromptGenerator`
-- **NEW**: Now accepts dynamic shot templates and base style from PromptConfig
+- Accepts dynamic shot templates and base style from PromptConfig
 - Generates diverse prompts for any content type (cars, aliens, etc.)
 - `generate_prompts(subject, count, shot_templates, base_style)` - fully customizable
-- **Legacy**: Default car templates still available for backward compatibility
+- Requires `shot_templates` parameter (no default templates)
 - Cleans subject names (removes generation codes, normalizes formatting)
 
 **`video_composer.py`**: `VideoComposer`
@@ -155,9 +152,9 @@ Centralized config loaded from `.env`:
 
 ## Adding New Content Types
 
-**NEW**: Just create a YAML config file - no code changes needed!
+Just create a YAML config file - no code changes needed!
 
-### Quick Start (Recommended)
+### Quick Start
 1. Copy an existing config:
    ```bash
    cp prompt_configs/cars.yaml prompt_configs/scary_stories.yaml
@@ -176,14 +173,6 @@ Centralized config loaded from `.env`:
    ```
 
 See [prompt_configs/README.md](prompt_configs/README.md) for detailed documentation.
-
-### Legacy Method (Not Recommended)
-
-If not using configs, edit code directly:
-1. **Edit `core/content_generator.py`**: Add new prompt in `_get_legacy_prompt(topic)`
-2. **Edit `core/story_writer.py`**: Add corresponding script template
-3. **Edit `core/ai_prompt_generator.py`**: Add shot templates for the topic
-4. Test with: `python3 main.py --topic newtopic --no-distribute`
 
 ## Adding Distribution Platforms
 

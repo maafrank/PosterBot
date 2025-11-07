@@ -14,13 +14,16 @@ from core.prompt_config import PromptConfig
 class Pipeline:
     """Orchestrates the entire video creation and distribution workflow"""
 
-    def __init__(self, prompt_config=None):
+    def __init__(self, prompt_config):
         """
         Initialize the pipeline
 
         Args:
-            prompt_config: PromptConfig object or None for legacy behavior
+            prompt_config: PromptConfig object (required)
         """
+        if not prompt_config:
+            raise ValueError("Pipeline requires a PromptConfig object. Legacy topic-based mode has been removed.")
+
         self.prompt_config = prompt_config
 
         # Initialize all components with config
@@ -78,15 +81,14 @@ class Pipeline:
         except Exception as e:
             self.logger.warning(f"⚠️  Error cleaning up temp files: {e}")
 
-    def run(self, iterations=1, topic="cars", distribute_to="email", prompt_config=None):
+    def run(self, iterations=1, distribute_to="email", prompt_config=None):
         """
         Run the complete pipeline
 
         Args:
             iterations: Number of videos to create
-            topic: Topic for content generation (legacy, ignored if prompt_config provided)
             distribute_to: Platform to distribute to ("email", "instagram", etc.)
-            prompt_config: PromptConfig object (overrides instance config and topic)
+            prompt_config: PromptConfig object (overrides instance config if provided)
 
         Returns:
             list: Paths to created videos
@@ -98,11 +100,8 @@ class Pipeline:
         # Use provided config or instance config
         config = prompt_config or self.prompt_config
 
-        if config:
-            config_name = config.get_name()
-            self.logger.info(f"Starting pipeline: {iterations} iterations, config={config_name}")
-        else:
-            self.logger.info(f"Starting pipeline: {iterations} iterations, topic={topic} (legacy)")
+        config_name = config.get_name()
+        self.logger.info(f"Starting pipeline: {iterations} iterations, config={config_name}")
 
         created_videos = []
 
@@ -112,7 +111,7 @@ class Pipeline:
             self.logger.info(f"{'='*60}\n")
 
             try:
-                video_path = self._run_single_iteration(topic, distribute_to, i+1, config)
+                video_path = self._run_single_iteration(distribute_to, i+1, config)
                 if video_path:
                     created_videos.append(video_path)
 
@@ -126,33 +125,30 @@ class Pipeline:
 
         return created_videos
     
-    def _run_single_iteration(self, topic, distribute_to, iteration_num, prompt_config=None):
+    def _run_single_iteration(self, distribute_to, iteration_num, prompt_config=None):
         """Run a single iteration of the pipeline"""
+
+        # Use provided config or instance config
+        config = prompt_config or self.prompt_config
 
         # Step 1: Generate idea
         self.logger.info("Step 1: Generating content idea...")
-        if prompt_config:
-            idea = self.idea_generator.generate_idea(prompt_config=prompt_config)
-        else:
-            idea = self.idea_generator.generate_idea(topic=topic)
-        
+        idea = self.idea_generator.generate_idea(prompt_config=config)
+
         if not idea:
             self.logger.error("Failed to generate idea")
             return None
-        
+
         subject = idea.get("subject", "Unknown")
         concept = idea.get("concept", "Unknown")
-        
+
         self.logger.info(f"Subject: {subject}")
         self.logger.info(f"Concept: {concept}")
-        
+
         # Step 2: Write script
         self.logger.info("\nStep 2: Writing script...")
-        if prompt_config:
-            script = self.story_writer.write_script(concept, prompt_config=prompt_config)
-        else:
-            script = self.story_writer.write_script(concept, topic=topic)
-        
+        script = self.story_writer.write_script(concept, prompt_config=config)
+
         if not script:
             self.logger.error("Failed to write script")
             return None
